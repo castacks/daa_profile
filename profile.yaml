@@ -1,0 +1,16 @@
+# test config
+input_dir: /storage2/datasets/nkeetha/daa/profile_data
+num_cam: 6
+trt_batch_size: 6
+width: 2448
+height: 2048
+padding: 56
+
+# model config
+use_tensorrt: True
+use_torch2trt: False
+input_frames: 2
+models_dir: /home/user/keethanikhil/daa/daa_profile/models
+full_res_model_chkpt: 120_hrnet32_all_2220.pth
+fp16_mode: True # Torch2TRT
+int8_mode: False # Torch2TRT
