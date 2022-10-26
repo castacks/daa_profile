@@ -64,6 +64,7 @@ class SegDetector:
         models_dir = os.path.join(base_dir, cfg['models_dir'])
         self.use_tensorrt = cfg['use_tensorrt']
         self.use_torch2trt = cfg['use_torch2trt']
+        self.use_dla = cfg['use_dla']
         self.input_frames = cfg['input_frames']
         self.trt_batch_size = cfg['trt_batch_size']
         self.trt_resolution = cfg['trt_resolution']
@@ -77,20 +78,42 @@ class SegDetector:
         if self.use_tensorrt:
             import torch_tensorrt
 
-            if os.path.exists(f"{models_dir}/120_hrnet32_all_2220.ts"):
-                print('Loading TensorRT detector model ...')
-                self.model = torch.jit.load(f"{models_dir}/120_hrnet32_all_2220.ts")
+            if not self.use_dla:
+                if os.path.exists(f"{models_dir}/120_hrnet32_all_2220.ts"):
+                    print('Loading TensorRT detector model ...')
+                    self.model = torch.jit.load(f"{models_dir}/120_hrnet32_all_2220.ts")
+                else:
+                    print('Compiling TensorRT detector model ...')
+                    self.model_jit = torch.jit.trace(self.model, torch.rand((self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1])).cuda().float(), strict=False)
+                    print(self.model_jit.graph)
+                    self.model = torch_tensorrt.compile(
+                        self.model_jit, 
+                        inputs=[torch_tensorrt.Input(shape=[self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1]], dtype=torch.half)], 
+                        enabled_precisions={torch.half},
+                        truncate_long_and_double=True
+                    )
+                    torch.jit.save(self.model, f"{models_dir}/120_hrnet32_all_2220.ts")
             else:
-                print('Compiling TensorRT detector model ...')
-                self.model_jit = torch.jit.trace(self.model, torch.rand((self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1])).cuda().float(), strict=False)
-                print(self.model_jit.graph)
-                self.model = torch_tensorrt.compile(
-                    self.model_jit, 
-                    inputs=[torch_tensorrt.Input(shape=[self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1]])], 
-                    enabled_precisions={torch.half},
-                    truncate_long_and_double=True
-                )
-                torch.jit.save(self.model, f"{models_dir}/120_hrnet32_all_2220.ts")
+                if os.path.exists(os.path.join(models_dir, 'model_dla_b_{}.ts'.format(self.trt_batch_size))):
+                    print('Loading TensorRT detector model ...')
+                    self.model = torch.jit.load(os.path.join(models_dir, 'model_dla_b_{}.ts'.format(self.trt_batch_size)))
+                else:
+                    print('Compiling TensorRT detector model ...')
+                    self.model_jit = torch.jit.trace(self.model, torch.rand((self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1])).cuda().float(), strict=False)
+                    trt_engine = torch_tensorrt.ts.convert_method_to_trt_engine(
+                            self.model_jit,
+                            method_name="forward",
+                            inputs=[torch_tensorrt.Input(shape=[self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1]], dtype=torch.half)], 
+                            device=torch_tensorrt.Device("dla:0", allow_gpu_fallback=True),
+                            enabled_precisions={torch.half},
+                            truncate_long_and_double=True
+                        )
+                    with open(os.path.join(models_dir, 'model_dla_b_{}.engine'.format(self.trt_batch_size)), 'wb') as f:
+                        f.write(trt_engine)
+                    
+                    self.model = torch_tensorrt.ts.embed_engine_in_new_module(trt_engine, device=torch_tensorrt.Device("dla:0", allow_gpu_fallback=True))
+                    torch.jit.save(self.model, os.path.join(models_dir, 'model_dla_b_{}.ts'.format(self.trt_batch_size)))
+
 
         elif self.use_torch2trt:
             from torch2trt import torch2trt, TRTModule
@@ -116,3 +139,7 @@ class SegDetector:
                     int8_mode=cfg['int8_mode']
                 )
                 torch.save(self.model.state_dict(), os.path.join(model_trt_dir, cfg['full_res_model_chkpt']))
+
+                with open(os.path.join(model_trt_dir, 'model_trt.engine'), 'wb') as f:
+                    data = torch.load(os.path.join(model_trt_dir, cfg['full_res_model_chkpt']))
+                    f.write(data["engine"])

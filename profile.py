@@ -68,7 +68,7 @@ def run_inference(cfg, detector):
 
             prev_frame['cam_'+str(num)] = frame
 
-        X = torch.from_numpy(X).float().cuda() / 255.0
+        X = torch.from_numpy(X).half().cuda() / 255.0
         Ttensor += time.time() - t1
 
         t2 = time.time()
@@ -103,6 +103,7 @@ def run_evaluation(experiment: str):
     detector = SegDetector(cfg=dict(
         use_tensorrt=cfg['use_tensorrt'],
         use_torch2trt=cfg['use_torch2trt'],
+        use_dla=cfg['use_dla'],
         input_frames=cfg['input_frames'],
         trt_batch_size=cfg['trt_batch_size'],
         trt_resolution=cfg['trt_resolution'],

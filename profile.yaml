@@ -1,7 +1,7 @@
 # test config
-input_dir: /storage2/datasets/nkeetha/daa/profile_data
-num_cam: 6
-trt_batch_size: 6
+input_dir: /home/airlab/DAA/extrinsic
+num_cam: 1
+trt_batch_size: 1
 width: 2448
 height: 2048
 padding: 56
@@ -9,8 +9,9 @@ padding: 56
 # model config
 use_tensorrt: True
 use_torch2trt: False
+use_dla: True
 input_frames: 2
-models_dir: /home/user/keethanikhil/daa/daa_profile/models
+models_dir: /home/airlab/DAA/models
 full_res_model_chkpt: 120_hrnet32_all_2220.pth
 fp16_mode: True # Torch2TRT
 int8_mode: False # Torch2TRT
