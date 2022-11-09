@@ -104,6 +104,7 @@ def run_evaluation(experiment: str):
         use_tensorrt=cfg['use_tensorrt'],
         use_torch2trt=cfg['use_torch2trt'],
         use_dla=cfg['use_dla'],
+        export_onnx=cfg['export_onnx'],
         input_frames=cfg['input_frames'],
         trt_batch_size=cfg['trt_batch_size'],
         trt_resolution=cfg['trt_resolution'],

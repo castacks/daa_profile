@@ -9,7 +9,8 @@ padding: 56
 # model config
 use_tensorrt: True
 use_torch2trt: False
-use_dla: True
+use_dla: False
+export_onnx: False
 input_frames: 2
 models_dir: /home/airlab/DAA/models
 full_res_model_chkpt: 120_hrnet32_all_2220.pth

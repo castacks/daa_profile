@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.onnx
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
@@ -65,6 +66,7 @@ class SegDetector:
         self.use_tensorrt = cfg['use_tensorrt']
         self.use_torch2trt = cfg['use_torch2trt']
         self.use_dla = cfg['use_dla']
+        self.export_onnx = cfg['export_onnx']
         self.input_frames = cfg['input_frames']
         self.trt_batch_size = cfg['trt_batch_size']
         self.trt_resolution = cfg['trt_resolution']
@@ -74,14 +76,30 @@ class SegDetector:
         self.model.load_state_dict(torch.load(f'{models_dir}/{cfg["full_res_model_chkpt"]}')['model_state_dict'], strict=False)
         self.model = self.model.cuda()
         self.model.eval()
+
+        if cfg['export_onnx']:
+            example_input = torch.randn((cfg['trt_batch_size'], cfg['input_frames'], cfg['trt_resolution'][0], cfg['trt_resolution'][1])).cuda()
+            input_names = ['input_0']
+            output_names = ['output_0', 'output_1', 'output_2', 'output_3', 'output_4', 'output_5']
+            torch.onnx.export(self.model, example_input, os.path.join(models_dir, 'model_b_{}.onxx'.format(self.trt_batch_size)), 
+                    verbose=True, input_names=input_names, output_names=output_names, opset_version=11,
+                    dynamic_axes={
+                        'input_0': {0: 'batch_size'},
+                        'output_0': {0: 'batch_size'},
+                        'output_1': {0: 'batch_size'},
+                        'output_2': {0: 'batch_size'},
+                        'output_3': {0: 'batch_size'},
+                        'output_4': {0: 'batch_size'},
+                        'output_5': {0: 'batch_size'}
+                    })
         
         if self.use_tensorrt:
             import torch_tensorrt
 
             if not self.use_dla:
-                if os.path.exists(f"{models_dir}/120_hrnet32_all_2220.ts"):
+                if os.path.exists(os.path.join(models_dir, '120_hrnet32_all_2220_b_{}.ts'.format(self.trt_batch_size))):
                     print('Loading TensorRT detector model ...')
-                    self.model = torch.jit.load(f"{models_dir}/120_hrnet32_all_2220.ts")
+                    self.model = torch.jit.load(os.path.join(models_dir, '120_hrnet32_all_2220_b_{}.ts'.format(self.trt_batch_size)))
                 else:
                     print('Compiling TensorRT detector model ...')
                     self.model_jit = torch.jit.trace(self.model, torch.rand((self.trt_batch_size, self.input_frames, self.trt_resolution[0], self.trt_resolution[1])).cuda().float(), strict=False)
@@ -92,7 +110,7 @@ class SegDetector:
                         enabled_precisions={torch.half},
                         truncate_long_and_double=True
                     )
-                    torch.jit.save(self.model, f"{models_dir}/120_hrnet32_all_2220.ts")
+                    torch.jit.save(self.model, os.path.join(models_dir, '120_hrnet32_all_2220_b_{}.ts'.format(self.trt_batch_size)))
             else:
                 if os.path.exists(os.path.join(models_dir, 'model_dla_b_{}.ts'.format(self.trt_batch_size))):
                     print('Loading TensorRT detector model ...')
